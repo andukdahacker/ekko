@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenv
+.venv/
+venv/
+
+# Editable-install / packaging artifacts
+*.egg-link
+
+# OS
+.DS_Store
+
+# Local data / audio / notes (never commit recordings or the db)
+*.wav
+*.aiff
+ekko.db

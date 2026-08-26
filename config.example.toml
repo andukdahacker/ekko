@@ -1,0 +1,38 @@
+# Copy to ~/.ekko/config.toml and edit.
+
+# Where the SQLite record + audio live (on-device).
+data_dir = "~/.ekko"
+
+[capture]
+audio_dir = "~/.ekko/audio"
+# input_device: leave unset for the default mic (in-person).
+# For ONLINE meetings, create a BlackHole+mic Aggregate Device and put its
+# name or index here so one stream carries system audio + your mic.
+# input_device = "Aggregate Device"
+
+[whisper]
+# "small"/"base" are the sweet spot on a 16GB M2. "large-v3" = best quality.
+model_size = "small"
+compute_type = "int8"
+
+[diarize]
+# Off by default — v1 works without it (everyone -> "Speaker A").
+# Turn on after setting up a Hugging Face token for pyannote.
+enabled = false
+# hf_token = "hf_..."
+
+[summarize]
+# Gemini Flash by default. Use a BILLING-ENABLED key (paid tier isn't used for
+# training). Set GEMINI_API_KEY in the environment, or put api_key here.
+model = "gemini-3.6-flash"
+# api_key = "..."
+
+[speakers]
+# Optional: rename anonymous diarization clusters to real names (in-person).
+# [speakers.name_map]
+# "Speaker A" = "Duc"
+# "Speaker B" = "Priya"
+
+[markdown]
+enabled = true
+vault_dir = "~/Notes/meetings"   # point at an Obsidian vault if you use one
