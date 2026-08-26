@@ -137,7 +137,13 @@ ekko record --kind online              # online meeting (auto-routes output)
 ekko process meeting.wav --kind online # process an existing file
 ekko devices                           # list input devices (+ --test)
 ekko list                              # past meetings
+ekko update                            # upgrade in place
+ekko uninstall                         # remove ekko (--purge also removes data)
 ```
+
+In the TUI: **r/o** record · **s** stop · **p** play · **v** reveal · **R**
+re-process · **/** search · **y** copy note · **x** delete · **?** help · **q**
+quit. A live transcript preview shows while you record.
 
 > Not installed as a command yet? Any `ekko …` also works as
 > `python -m ekko.cli …` from the repo with the venv active.

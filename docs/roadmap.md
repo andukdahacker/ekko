@@ -16,12 +16,15 @@ via `ekko tui`. A lazygit-style frontend (peer of `cli.py`) that reuses the same
 building blocks — see [implementation.md](implementation.md#terminal-ui-ekko-tui).
 Ships with: browsable meetings list, Markdown note viewer, live audio-status
 panel, start/stop recording with a live timer and online output auto-routing,
-process-an-existing-file, and delete-with-confirm. Processing runs in a worker
-thread with stage progress fed back through the pipeline's `on_progress` callback.
+process-an-existing-file, delete-with-confirm, **audio playback + reveal-on-disk**,
+**re-process a meeting**, **search/filter**, **copy-note-to-clipboard**, a **help
+modal**, and a **live transcript preview during recording** (rolling-window tiny
+model, shown while you record). Processing runs in a worker thread with stage
+progress via the pipeline's `on_progress` callback.
 
-**Still open (deferred):** inline speaker renaming + re-identify; audio playback /
-reveal-on-disk; re-process a meeting; in-app config editor; search/filter; live
-transcript preview during recording.
+**Still open (deferred):** inline speaker renaming + re-identify (pairs with
+diarization); in-app config editor; a true *streaming* transcript (the current
+preview re-transcribes a rolling window rather than streaming).
 
 ## 1. Phone-as-source (watched-folder upload)
 

@@ -79,6 +79,24 @@ class PromptScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class HelpScreen(ModalScreen):
+    """Keybinding cheatsheet (dismiss with any key)."""
+    BINDINGS = [Binding("escape,q,question_mark", "dismiss", "Close")]
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            "[b]ekko — keys[/b]\n\n"
+            "  [b]r[/b] record in-person    [b]o[/b] record online    [b]s[/b] stop\n"
+            "  [b]p[/b] play audio          [b]v[/b] reveal on disk    [b]R[/b] re-process\n"
+            "  [b]f[/b] process a file      [b]y[/b] copy note         [b]x[/b] delete\n"
+            "  [b]/[/b] search              [b]j/k[/b] move            [b]tab[/b] focus\n"
+            "  [b]?[/b] help                [b]q[/b] quit\n\n"
+            "[dim]esc / q to close[/]", id="help")
+
+    def on_key(self, event) -> None:                 # any key closes
+        self.dismiss()
+
+
 class EkkoApp(App):
     TITLE = "ekko"
     SUB_TITLE = "meeting notes"
@@ -94,19 +112,26 @@ class EkkoApp(App):
         border: thick $accent; background: $surface;
         align: center middle;
     }
-    ConfirmScreen, PromptScreen { align: center middle; }
+    ConfirmScreen, PromptScreen, HelpScreen { align: center middle; }
+    #help { width: 64; height: auto; padding: 1 2; border: thick $accent;
+            background: $surface; }
     """
 
     BINDINGS = [
-        Binding("r", "record('in_person')", "Record"),
+        Binding("r", "record('in_person')", "Rec"),
         Binding("o", "record('online')", "Online"),
         Binding("s", "stop", "Stop"),
-        Binding("p", "process_file", "Process"),
+        Binding("p", "play", "Play"),
+        Binding("R", "reprocess", "Reprocess"),
+        Binding("slash", "search", "Search"),
         Binding("x", "delete", "Delete"),
+        Binding("f", "process_file", "File", show=False),
+        Binding("v", "reveal", "Reveal", show=False),
+        Binding("y", "copy", "Copy", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("tab", "focus_next", "Focus", show=False),
-        Binding("?", "help", "Help"),
+        Binding("question_mark", "help", "Help"),
         Binding("q", "quit", "Quit"),
     ]
 
@@ -118,6 +143,7 @@ class EkkoApp(App):
         self.pipeline = None
         self.pipeline_error: str | None = None
         self.selected_id: int | None = None
+        self.filter: str = ""
         # recording state
         self.recording = False
         self.busy = False
@@ -181,6 +207,10 @@ class EkkoApp(App):
         table = self.query_one("#meetings", DataTable)
         table.clear()
         rows = self.store.list_meetings() if self.store else []
+        if self.filter:
+            f = self.filter.lower()
+            rows = [r for r in rows if f in r[2].lower() or f in r[1].lower()]
+        table.border_title = f"Meetings  (/{self.filter})" if self.filter else "Meetings"
         for mid, when, title in rows:
             date = when[:16].replace("T", " ")
             table.add_row(str(mid), date, title, key=str(mid))
@@ -189,8 +219,9 @@ class EkkoApp(App):
             self.show_details(int(rows[0][0]))
         else:
             self.selected_id = None
-            self.query_one("#details", Markdown).update(
-                "_No meetings yet. Press **r** (in-person) or **o** (online) to record._")
+            msg = (f"_No meetings match “{self.filter}”._" if self.filter else
+                   "_No meetings yet. Press **r** (in-person) or **o** (online) to record._")
+            self.query_one("#details", Markdown).update(msg)
 
     def show_details(self, meeting_id: int) -> None:
         self.selected_id = meeting_id
@@ -245,10 +276,72 @@ class EkkoApp(App):
         self.query_one("#meetings", DataTable).action_cursor_up()
 
     def action_help(self) -> None:
-        self.notify(
-            "r/o record (in-person/online) · s stop · p process a file · "
-            "x delete · j/k move · tab focus · q quit",
-            title="ekko keys", timeout=8)
+        self.push_screen(HelpScreen())
+
+    def action_search(self) -> None:
+        self.push_screen(PromptScreen("Filter meetings (empty = clear):",
+                                      self.filter or "title or date…"),
+                         self._on_search)
+
+    def _on_search(self, text: str | None) -> None:
+        self.filter = (text or "").strip()
+        self.refresh_meetings()
+
+    # --- per-meeting actions (play / reveal / copy / re-process) -------------
+    def _selected_meeting(self):
+        if self.selected_id is None or not self.store:
+            self.notify("No meeting selected.", severity="warning")
+            return None
+        return self.store.get(self.selected_id)
+
+    def action_play(self) -> None:
+        m = self._selected_meeting()
+        if not m:
+            return
+        if not m.audio_path or not Path(m.audio_path).exists():
+            self.notify("No audio file for this meeting.", severity="warning")
+            return
+        from .sysutil import play_audio
+        if play_audio(Path(m.audio_path)):
+            self.notify("▶ playing…")
+        else:
+            self.notify("No audio player found.", severity="warning")
+
+    def action_reveal(self) -> None:
+        m = self._selected_meeting()
+        if not m or not m.audio_path:
+            self.notify("No audio file for this meeting.", severity="warning")
+            return
+        from .sysutil import reveal_file
+        if not reveal_file(Path(m.audio_path)):
+            self.notify("Couldn't open the file manager.", severity="warning")
+
+    def action_copy(self) -> None:
+        m = self._selected_meeting()
+        if not m:
+            return
+        from .sysutil import copy_text
+        if copy_text(render_note(m)):
+            self.notify("Copied note to clipboard.")
+        else:
+            self.notify("No clipboard tool found.", severity="warning")
+
+    def action_reprocess(self) -> None:
+        if self.busy or self.recording:
+            self.notify("Busy — try again shortly.", severity="warning")
+            return
+        if self.pipeline is None:
+            self.notify(f"Can't re-process: {self.pipeline_error or 'pipeline unavailable'}",
+                        severity="error", timeout=10)
+            return
+        m = self._selected_meeting()
+        if not m:
+            return
+        if not m.audio_path or not Path(m.audio_path).exists():
+            self.notify("Original audio is gone — can't re-process.", severity="warning")
+            return
+        self._process_audio(Path(m.audio_path), m.title, m.kind, m.started_at,
+                            replace_id=m.id)
 
     # --- recording ----------------------------------------------------------
     def action_record(self, kind: str) -> None:
@@ -286,6 +379,48 @@ class EkkoApp(App):
         self.rec_started_mono = time.monotonic()
         self._render_audio()
         self.notify(f"● Recording ({kind}). Press s to stop.")
+        self._live_preview()              # live transcript (best-effort; no-ops if unsupported)
+
+    # --- live transcript preview --------------------------------------------
+    @work(thread=True, group="preview", exclusive=True)
+    def _live_preview(self) -> None:
+        import tempfile
+        import time as _time
+
+        import soundfile as sf
+        tr = None
+        tmp = Path(tempfile.gettempdir()) / "ekko-live.wav"
+        while self.recording:
+            _time.sleep(3.0)
+            if not self.recording:
+                break
+            try:
+                got = self.source.latest_audio(10.0)
+            except Exception:
+                got = None
+            if not got:
+                continue
+            data, rate = got
+            if data is None or data.size < rate * 0.6:   # need ~0.6s of audio
+                continue
+            if tr is None:
+                from .transcribe.whisper import WhisperTranscriber
+                tr = WhisperTranscriber(model_size="tiny")
+            try:
+                sf.write(tmp, data, rate, subtype="PCM_16")
+                text = " ".join(s.text for s in tr.transcribe(str(tmp)).segments).strip()
+            except Exception:
+                continue
+            self.call_from_thread(self._show_live, text)
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    def _show_live(self, text: str) -> None:
+        if self.recording:
+            self.query_one("#details", Markdown).update(
+                f"## ● Live transcript\n\n{text or '_…listening…_'}")
 
     def action_stop(self) -> None:
         if not self.recording:
@@ -322,8 +457,8 @@ class EkkoApp(App):
 
     # --- shared processing worker ------------------------------------------
     @work(thread=True, exclusive=True)
-    def _process_audio(self, audio_path: Path, title: str,
-                       kind: MeetingKind, started_at: datetime) -> None:
+    def _process_audio(self, audio_path: Path, title: str, kind: MeetingKind,
+                       started_at: datetime, replace_id: int | None = None) -> None:
         self.busy = True
         self.call_from_thread(self._set_progress, "⚙ [1/5] transcribing…")
 
@@ -333,7 +468,7 @@ class EkkoApp(App):
         try:
             self.pipeline.process(audio_path, title=title, kind=kind,
                                   started_at=started_at, on_progress=prog)
-            self.call_from_thread(self._on_processed, title)
+            self.call_from_thread(self._on_processed, title, replace_id)
         except Exception as e:
             import traceback
             self.last_error = traceback.format_exc()
@@ -347,8 +482,13 @@ class EkkoApp(App):
         self._progress = text
         self._render_audio()
 
-    def _on_processed(self, title: str) -> None:
-        self.notify(f"✓ Saved “{title}”.")
+    def _on_processed(self, title: str, replace_id: int | None = None) -> None:
+        if replace_id is not None and self.store:      # re-process: drop the old row
+            try:
+                self.store.delete(replace_id)
+            except Exception:
+                pass
+        self.notify(f"✓ {'Re-processed' if replace_id else 'Saved'} “{title}”.")
         self.refresh_meetings()
 
     # --- delete -------------------------------------------------------------

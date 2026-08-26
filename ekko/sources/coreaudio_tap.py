@@ -26,6 +26,7 @@ import soundfile as sf
 from ..models import MeetingKind
 from . import coreaudio as ca
 from .base import AudioSource
+from .ringbuffer import RingBuffer
 
 _vp, _u32, _f32 = ctypes.c_void_p, ctypes.c_uint32, ctypes.c_float
 _objc = ctypes.CDLL(ctypes.util.find_library("objc"))
@@ -151,6 +152,10 @@ class TapSource(AudioSource):
         self._procid = _vp(0)
         self._cb = None          # keep the CFUNCTYPE alive
         self._rate = 48_000
+        self._ring = RingBuffer(48_000)   # recent audio for live preview
+
+    def latest_audio(self, seconds: float):
+        return self._ring.latest(seconds)
 
     def start(self, kind: MeetingKind) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -167,6 +172,7 @@ class TapSource(AudioSource):
         self._tap, tap_uid, self._desc = _create_system_tap()
         self._agg = _create_tap_aggregate(tap_uid, mic.uid)
         self._rate = _nominal_sample_rate(self._agg)
+        self._ring = RingBuffer(self._rate)
 
         def on_io(inDev, inNow, inData, inInTime, outData, outOutTime, client):
             if not inData:
@@ -188,7 +194,9 @@ class TapSource(AudioSource):
                 monos.append(np.array(arr, copy=True))
             if monos:
                 m = min(len(x) for x in monos)
-                self._q.put(np.mean([x[:m] for x in monos], axis=0).astype(np.float32))
+                mixed = np.mean([x[:m] for x in monos], axis=0).astype(np.float32)
+                self._q.put(mixed)
+                self._ring.push(mixed)
             return 0
 
         self._cb = _IOProc(on_io)

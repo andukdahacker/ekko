@@ -244,7 +244,29 @@ status panel on the left, a **Details** Markdown viewer on the right, and a
   the CLI uses).
 - **Process a file** — `p` opens a prompt for an audio path.
 - **Delete** — `x` with a yes/no confirm modal (`SqliteStore.delete()`).
-- **Navigate** — `j`/`k` move, `Tab` switches focus, `?` shows keys, `q` quits.
+- **Play / reveal** — `p` plays the selected meeting's audio, `v` reveals it on
+  disk (cross-platform via `sysutil.py`: afplay/open on macOS, paplay/xdg-open on
+  Linux).
+- **Re-process** — `R` re-runs the pipeline on a saved recording (e.g. after
+  changing the Whisper model) and replaces the old row.
+- **Search / copy** — `/` filters the list by title/date; `y` copies the rendered
+  note to the clipboard (pbcopy/xclip/wl-copy).
+- **Live transcript preview** — while recording, a `@work(group="preview")` worker
+  transcribes a rolling ~10 s window with a tiny model and shows it in the details
+  pane. Backed by `AudioSource.latest_audio(seconds)` — a thread-safe ring buffer
+  in `LaptopSource`/`TapSource`, and a raw-tail read in `MonitorSource`. Best-
+  effort: sources that don't implement it just skip the preview.
+- **Navigate** — `j`/`k` move, `Tab` switches focus, `?` opens the help modal,
+  `q` quits.
+
+## Managing the install (`update` / `uninstall`)
+
+`ekko update` upgrades in place from the origin pip recorded at install time
+(PEP 610 `direct_url.json`), falling back to the baked `REPO_URL`; editable
+checkouts are told to `git pull`. `ekko uninstall` runs `audio` teardown, removes
+the `~/.local/bin/ekko` launcher (only if it points into this venv) and the
+`~/.ekko/venv`; `--purge` also deletes `~/.ekko` data. Both refuse on source
+checkouts and advise the manual step.
 
 The blocking pipeline (Whisper, Gemini) runs in a Textual `@work(thread=True)`
 worker, with stage progress reported back to the Audio panel via the pipeline's

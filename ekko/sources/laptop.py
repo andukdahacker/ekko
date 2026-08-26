@@ -23,6 +23,7 @@ import soundfile as sf
 
 from ..models import MeetingKind
 from .base import AudioSource
+from .ringbuffer import RingBuffer as _RingBuffer
 
 SAMPLE_RATE = 16_000   # what Whisper wants; avoids a resample step
 CHANNELS = 1           # we ALWAYS write mono (Whisper wants mono)
@@ -37,6 +38,7 @@ class LaptopSource(AudioSource):
         self._writer: threading.Thread | None = None
         self._stop = threading.Event()
         self._path: Path | None = None
+        self._ring = _RingBuffer(SAMPLE_RATE)   # recent audio for live preview
 
     def start(self, kind: MeetingKind) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -53,12 +55,15 @@ class LaptopSource(AudioSource):
         # drop everyone (or you). Averaging the channels keeps both in one track.
         in_channels = self._device_input_channels()
 
+        self._ring.clear()
+
         def on_audio(indata, frames, time_info, status):  # sounddevice callback
             if status:
                 print(f"[capture] {status}")
             # indata is (frames, in_channels) float32 -> mono (frames, 1).
             mono = indata.mean(axis=1, keepdims=True) if indata.shape[1] > 1 else indata
             self._q.put(mono.copy())
+            self._ring.push(mono[:, 0])
 
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
@@ -70,6 +75,9 @@ class LaptopSource(AudioSource):
         self._stream.start()
         self._writer = threading.Thread(target=self._drain_to_file, daemon=True)
         self._writer.start()
+
+    def latest_audio(self, seconds: float):
+        return self._ring.latest(seconds)
 
     def _device_input_channels(self) -> int:
         """How many input channels the chosen device exposes (>=1).

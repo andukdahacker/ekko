@@ -240,6 +240,77 @@ def _update(args) -> None:
         raise SystemExit(rc)
 
 
+def _uninstall(args) -> None:
+    """Remove the ekko install: audio devices, the `ekko` launcher, and the venv.
+    With --purge, also delete ~/.ekko data (config, db, recordings)."""
+    import shutil
+    import sys as _sys
+
+    import ekko
+    pkg = Path(ekko.__file__).resolve().parent
+    if "site-packages" not in pkg.parts:
+        print("Running from a source checkout — nothing to uninstall here.")
+        print("  Remove the launcher + venv manually, e.g.:")
+        print("    rm -f ~/.local/bin/ekko && rm -rf ./.venv")
+        return
+
+    venv = Path(_sys.prefix).resolve()                 # the isolated venv
+    home = Path("~/.ekko").expanduser()
+    launcher = Path("~/.local/bin/ekko").expanduser()
+
+    # what we'll remove
+    targets = []
+    if launcher.exists() or launcher.is_symlink():
+        try:
+            points_into_venv = str(launcher.resolve()).startswith(str(venv))
+        except Exception:
+            points_into_venv = False
+        if points_into_venv:                           # don't touch an unrelated launcher
+            targets.append(("launcher", launcher))
+    if venv.exists():
+        targets.append(("venv", venv))
+    if args.purge and home.exists():
+        targets.append(("data (config, db, recordings)", home))
+
+    print("This will remove:")
+    for label, path in targets:
+        print(f"  - {label}: {path}")
+    if not args.purge and home.exists():
+        print(f"  (keeping your data at {home} — use --purge to remove it too)")
+
+    if not args.yes:
+        try:
+            if input("\nProceed? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("Aborted.")
+                return
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            return
+
+    # 1. tear down any audio devices/modules ekko created
+    try:
+        from . import audio_setup as A
+        A.teardown()
+        print("  ✓ audio devices cleaned up")
+    except Exception:
+        pass
+
+    # 2. remove launcher + venv (+ data). Removing our own venv mid-run is fine on
+    # Unix — open files persist until exit.
+    for label, path in targets:
+        try:
+            if path.is_symlink() or path.is_file():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+            print(f"  ✓ removed {label}")
+        except Exception as e:
+            print(f"  ✗ couldn't remove {label}: {e}")
+
+    print("\nekko uninstalled." + ("" if args.purge else
+          f" Your data remains at {home}."))
+
+
 def _list(args) -> None:
     cfg = load_config(Path(args.config) if args.config else None)
     from .store.sqlite import SqliteStore
@@ -293,6 +364,12 @@ def main() -> None:
 
     up = sub.add_parser("update", help="upgrade ekko in place")
     up.set_defaults(func=_update)
+
+    un = sub.add_parser("uninstall", help="remove ekko (launcher, venv; --purge for data)")
+    un.add_argument("--purge", action="store_true",
+                    help="also delete ~/.ekko data (config, db, recordings)")
+    un.add_argument("--yes", action="store_true", help="skip confirmation")
+    un.set_defaults(func=_uninstall)
 
     args = p.parse_args()
     cmd = getattr(args, "cmd", None)

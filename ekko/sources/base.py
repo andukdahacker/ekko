@@ -27,3 +27,9 @@ class AudioSource(ABC):
     @abstractmethod
     def stop(self) -> Path:
         """Stop capturing and return the path to the recorded audio file."""
+
+    def latest_audio(self, seconds: float):
+        """Optional: return `(mono_float32, sample_rate)` for roughly the last
+        `seconds` of audio while recording, for a live transcript preview — or
+        None if this source doesn't support it. Best-effort; never raises."""
+        return None

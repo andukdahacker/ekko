@@ -66,6 +66,25 @@ class MonitorSource(AudioSource):
         self.out_dir = out_dir
         self._path: Path | None = None
         self._procs: list[tuple[subprocess.Popen, Path, object]] = []
+        self._sys_raw: Path | None = None   # system-monitor raw, for live preview
+
+    def latest_audio(self, seconds: float):
+        # Read the tail of the system-monitor raw file that parec is writing.
+        if not self._sys_raw or not self._sys_raw.exists():
+            return None
+        try:
+            nbytes = int(seconds * RATE) * 2          # s16le mono
+            with open(self._sys_raw, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - nbytes))
+                raw = f.read()
+        except OSError:
+            return None
+        if len(raw) < 2:
+            return None
+        data = np.frombuffer(raw[: len(raw) // 2 * 2], dtype=np.int16)
+        return (data.astype(np.float32) / 32768.0), RATE
 
     def _parec(self, source: str, raw_path: Path):
         f = open(raw_path, "wb")
@@ -88,7 +107,8 @@ class MonitorSource(AudioSource):
 
         self._procs = []
         if monitor:
-            self._procs.append(self._parec(monitor, self.out_dir / f".sys-{stamp}.raw"))
+            self._sys_raw = self.out_dir / f".sys-{stamp}.raw"
+            self._procs.append(self._parec(monitor, self._sys_raw))
         if mic:
             self._procs.append(self._parec(mic, self.out_dir / f".mic-{stamp}.raw"))
 
