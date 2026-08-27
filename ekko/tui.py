@@ -17,6 +17,7 @@ Gemini) runs in a thread worker via @work so the UI stays responsive.
 from __future__ import annotations
 
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -236,8 +237,21 @@ class EkkoApp(App):
         self.selected_id = meeting_id
         m = self.store.get(meeting_id) if self.store else None
         md = render_note(m) if m else "_Not found._"
+        if self.filter:
+            md = self._highlight_matches(md)
         self.query_one("#note", Markdown).update(md)
         self.query_one("#details", VerticalScroll).scroll_home(animate=False)
+
+    def _highlight_matches(self, md: str) -> str:
+        """Wrap occurrences of the active search term in a code span so they
+        stand out in the note. Code spans (not **bold**) because their backtick
+        delimiters don't collide with the bold markers the note already uses.
+        Skipped if the term itself contains a backtick (can't nest cleanly)."""
+        term = self.filter.strip()
+        if not term or "`" in term:
+            return md
+        return re.sub(re.escape(term), lambda hit: f"`{hit.group(0)}`",
+                      md, flags=re.IGNORECASE)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.row_key and event.row_key.value:
