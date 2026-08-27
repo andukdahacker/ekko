@@ -212,10 +212,13 @@ class EkkoApp(App):
     def refresh_meetings(self) -> None:
         table = self.query_one("#meetings", DataTable)
         table.clear()
-        rows = self.store.list_meetings() if self.store else []
-        if self.filter:
-            f = self.filter.lower()
-            rows = [r for r in rows if f in r[2].lower() or f in r[1].lower()]
+        if not self.store:
+            rows = []
+        elif self.filter:
+            # Search names, dates, AND content (transcript + summary text).
+            rows = self.store.search(self.filter)
+        else:
+            rows = self.store.list_meetings()
         table.border_title = f"Meetings  (/{self.filter})" if self.filter else "Meetings"
         for mid, when, title in rows:
             date = when[:16].replace("T", " ")
@@ -293,8 +296,8 @@ class EkkoApp(App):
         self.push_screen(HelpScreen())
 
     def action_search(self) -> None:
-        self.push_screen(PromptScreen("Filter meetings (empty = clear):",
-                                      self.filter or "title or date…"),
+        self.push_screen(PromptScreen("Search meetings (name, date, or words said — empty = clear):",
+                                      self.filter or "e.g. a name, 2026-08, or a phrase…"),
                          self._on_search)
 
     def _on_search(self, text: str | None) -> None:

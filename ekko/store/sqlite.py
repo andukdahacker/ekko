@@ -49,6 +49,18 @@ class SqliteStore:
         return list(self.db.execute(
             "SELECT id, started_at, title FROM meetings ORDER BY id DESC"))
 
+    def search(self, query: str) -> list[tuple[int, str, str]]:
+        """Like list_meetings, but only rows matching `query` (case-insensitive).
+        Matches the title, the date, and the *content* — transcript and summary
+        are stored as JSON text, so a LIKE over those columns finds spoken words
+        and summary points too, no separate full-text index needed."""
+        like = f"%{query}%"
+        return list(self.db.execute(
+            "SELECT id, started_at, title FROM meetings "
+            "WHERE title LIKE ? OR started_at LIKE ? "
+            "OR transcript_json LIKE ? OR summary_json LIKE ? "
+            "ORDER BY id DESC", (like, like, like, like)))
+
     def get(self, meeting_id: int) -> Meeting | None:
         """Reconstruct a full Meeting (transcript + summary) from storage."""
         row = self.db.execute(
