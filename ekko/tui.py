@@ -104,6 +104,8 @@ class EkkoApp(App):
     TITLE = "ekko"
     SUB_TITLE = "meeting notes"
 
+    SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"        # braille frames for the processing animation
+
     CSS = """
     #main { height: 1fr; }
     #left { width: 38%; }
@@ -158,9 +160,13 @@ class EkkoApp(App):
         self.rec_started_mono: float = 0.0
         self.rec_prev_output = None                  # opaque restore token from the backend
         self._audio_status: A.AudioStatus | None = None
-        self._progress: str = ""
         self.last_error: str | None = None
         self._player = None                          # running audio-playback process, if any
+        # processing progress (set by the pipeline's on_progress callback)
+        self._prog_step = 0
+        self._prog_total = 5
+        self._prog_label = ""
+        self._spin_i = 0
 
     # --- layout -------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -208,6 +214,7 @@ class EkkoApp(App):
         self.refresh_meetings()
         self.refresh_audio()
         self.set_interval(1.0, self._tick)
+        self.set_interval(0.1, self._spin)      # animates the processing spinner
 
     # --- data ---------------------------------------------------------------
     def refresh_meetings(self) -> None:
@@ -283,13 +290,28 @@ class EkkoApp(App):
             lines.append(f"[bold red]● REC[/] {kind}  "
                          f"{elapsed // 60:02d}:{elapsed % 60:02d}   [dim](s to stop)[/]")
         elif self.busy:
-            lines.append(f"[yellow]{self._progress or '⚙ working…'}[/]")
+            frame = self.SPINNER[self._spin_i % len(self.SPINNER)]
+            step, total = self._prog_step, self._prog_total
+            label = self._prog_label or "working"
+            lines.append(f"[yellow]{frame} [{step}/{total}] {label}…[/]")
+            lines.append(f"[yellow]{self._bar(step, total)}[/]")
         else:
             lines.append("[dim]● idle[/]")
         self.query_one("#audio", Static).update("\n".join(lines))
 
+    def _bar(self, step: int, total: int, width: int = 14) -> str:
+        total = max(1, total)
+        filled = max(0, min(width, round(width * step / total)))
+        return "█" * filled + "░" * (width - filled)
+
     def _tick(self) -> None:
         if self.recording or self.busy:
+            self._render_audio()
+
+    def _spin(self) -> None:
+        # Fast tick just for the processing spinner (keeps it visibly alive).
+        if self.busy:
+            self._spin_i += 1
             self._render_audio()
 
     # --- navigation ---------------------------------------------------------
@@ -557,10 +579,10 @@ class EkkoApp(App):
     def _process_audio(self, audio_path: Path, title: str, kind: MeetingKind,
                        started_at: datetime, replace_id: int | None = None) -> None:
         self.busy = True
-        self.call_from_thread(self._set_progress, "⚙ [1/5] transcribing…")
+        self.call_from_thread(self._begin_progress)
 
         def prog(step: int, total: int, label: str) -> None:
-            self.call_from_thread(self._set_progress, f"⚙ [{step}/{total}] {label}…")
+            self.call_from_thread(self._update_progress, step, total, label)
 
         try:
             self.pipeline.process(audio_path, title=title, kind=kind,
@@ -571,13 +593,33 @@ class EkkoApp(App):
             self.last_error = traceback.format_exc()
             self.call_from_thread(self.notify, f"Processing failed: {e}",
                                   severity="error", timeout=10)
+            self.call_from_thread(self.refresh_meetings)   # restore the note view
         finally:
             self.busy = False
-            self.call_from_thread(self._set_progress, "")
+            self.call_from_thread(self._render_audio)
 
-    def _set_progress(self, text: str) -> None:
-        self._progress = text
+    def _begin_progress(self) -> None:
+        self._prog_step, self._prog_total, self._prog_label = 0, 5, "starting"
         self._render_audio()
+        self._render_processing()
+
+    def _update_progress(self, step: int, total: int, label: str) -> None:
+        self._prog_step, self._prog_total, self._prog_label = step, total, label
+        self._render_audio()
+        self._render_processing()
+
+    def _render_processing(self) -> None:
+        """A prominent processing card in the details pane (updated per step, not
+        per spinner frame — the animated spinner lives in the Audio panel)."""
+        step, total = self._prog_step, self._prog_total
+        pct = int(100 * step / max(1, total))
+        self.query_one("#note", Markdown).update(
+            f"## ⚙ Processing…\n\n"
+            f"**Step {step}/{total} — {self._prog_label}**\n\n"
+            f"`{self._bar(step, total, 24)}`  {pct}%\n\n"
+            f"_Transcription runs on-device; summarizing may call the model. "
+            f"This can take a little while — feel free to wait._")
+        self.query_one("#details", VerticalScroll).scroll_home(animate=False)
 
     def _on_processed(self, title: str, replace_id: int | None = None) -> None:
         if replace_id is not None and self.store:      # re-process: drop the old row
