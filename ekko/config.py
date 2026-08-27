@@ -16,7 +16,7 @@ from .integrations.markdown import MarkdownIntegration
 from .pipeline import Pipeline
 from .sources.laptop import LaptopSource
 from .store.sqlite import SqliteStore
-from .summarize.gemini import GeminiSummarizer
+from .summarize import build_summarizer
 from .transcribe.diarize import Diarizer
 from .transcribe.whisper import WhisperTranscriber
 
@@ -66,9 +66,8 @@ def build_pipeline(cfg: dict) -> Pipeline:
     # v1: manual naming (in-person). Screen-based naming plugs in here later.
     identifier = ManualIdentifier(name_map=cfg.get("speakers", {}).get("name_map", {}))
 
-    sum_cfg = cfg.get("summarize", {})
-    summarizer = GeminiSummarizer(model=sum_cfg.get("model", "gemini-3.6-flash"),
-                                  api_key=sum_cfg.get("api_key"))
+    # provider = "gemini" (cloud, default) or "local" (Ollama, fully offline).
+    summarizer = build_summarizer(cfg.get("summarize", {}))
 
     store = SqliteStore(db_path=data_dir / "ekko.db")
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..models import Summary, Transcript
+from ..models import ActionItem, Summary, Transcript
 
 # Shared prompt so every provider is asked for the same structured output.
 SUMMARY_INSTRUCTIONS = """You are a meeting-notes assistant. Given a diarized \
@@ -23,6 +23,46 @@ Return JSON with exactly these keys:
 
 Attribute each action item to the speaker who owns it when the transcript makes
 it clear; use null when it's genuinely ambiguous. Do not invent action items."""
+
+# JSON schema for the same output. Providers that support schema-constrained
+# decoding (Gemini JSON mode, Ollama `format`) pass this so parsing never has to
+# recover from malformed JSON. Kept in lockstep with SUMMARY_INSTRUCTIONS above.
+SUMMARY_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tldr": {"type": "string"},
+        "key_points": {"type": "array", "items": {"type": "string"}},
+        "decisions": {"type": "array", "items": {"type": "string"}},
+        "action_items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "owner": {"type": ["string", "null"]},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    "required": ["tldr", "key_points", "decisions", "action_items"],
+}
+
+
+def summary_from_json(data: dict) -> Summary:
+    """Build a Summary from the provider's decoded JSON.
+
+    Shared so every Summarizer maps the same keys the same way — a new provider
+    only has to return this JSON shape, never reimplement the mapping."""
+    return Summary(
+        tldr=data.get("tldr", ""),
+        key_points=data.get("key_points", []),
+        decisions=data.get("decisions", []),
+        action_items=[
+            ActionItem(text=a["text"], owner=a.get("owner"))
+            for a in data.get("action_items", [])
+        ],
+    )
 
 
 class Summarizer(ABC):

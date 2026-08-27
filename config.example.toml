@@ -22,10 +22,21 @@ enabled = false
 # hf_token = "hf_..."
 
 [summarize]
-# Gemini Flash by default. Use a BILLING-ENABLED key (paid tier isn't used for
-# training). Set GEMINI_API_KEY in the environment, or put api_key here.
+# provider = "gemini" (cloud) or "local" (Ollama, fully offline). Default gemini.
+provider = "gemini"
+
+# --- provider = "gemini" (cloud) ---
+# Transcript TEXT is sent to Google (audio stays local). Use a BILLING-ENABLED
+# key (paid tier isn't used for training). Set GEMINI_API_KEY in the env, or here.
 model = "gemini-3.6-flash"
 # api_key = "..."
+
+# --- provider = "local" (Ollama — nothing leaves the device) ---
+# Install Ollama (https://ollama.com), then `ollama pull qwen2.5:7b`. Set
+# provider = "local" above and use a per-provider model id (the `model` line is
+# shared, so change it to the Ollama model when switching providers):
+# model = "qwen2.5:7b"
+# host = "http://localhost:11434"   # or set OLLAMA_HOST in the environment
 
 [speakers]
 # Optional: rename anonymous diarization clusters to real names (in-person).

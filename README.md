@@ -43,6 +43,10 @@ Then finish setup:
 ```bash
 $EDITOR ~/.ekko/config.toml               # paste your Gemini key (summarize.api_key)
 
+# fully offline instead? set summarize.provider = "local" (Ollama):
+#   install Ollama (https://ollama.com), then: ollama pull qwen2.5:7b
+#   nothing leaves the device — audio, transcript, AND summary all stay local
+
 # online meetings:
 #   macOS 14.4+:  nothing to set up — ekko taps system audio in place
 #   macOS <14.4:  brew install blackhole-2ch && ekko audio setup

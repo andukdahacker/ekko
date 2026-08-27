@@ -57,15 +57,28 @@ matches enrolled embeddings against diarization clusters and pre-fills the name
 map, so recurring people get named automatically with no per-meeting map. Works
 for both in-person and online, and composes with diarization.
 
-## 4. Local 8B summarizer (fully-offline option)
+## 4. Local 8B summarizer (fully-offline option) — LANDED, quality TBD
 
-**Seam:** `summarize/base.py::Summarizer`
+**Seam:** `summarize/base.py::Summarizer` → `summarize/local.py::LocalSummarizer`
 
 A local model implementing the same `Summarizer` interface removes the one
-remaining off-device hop, making ekko fully offline end-to-end. The shared
-`SUMMARY_INSTRUCTIONS` prompt already standardizes the requested JSON output, so
-this is a drop-in. **Measure the quality gap vs Gemini first** before defaulting
-to it — the honest bar is "notes you'd actually trust."
+remaining off-device hop, making ekko fully offline end-to-end. Implemented via
+**Ollama** (stdlib HTTP, no new Python deps): set `provider = "local"` in
+`[summarize]` and `ollama pull qwen2.5:7b`. The shared `SUMMARY_INSTRUCTIONS`
+prompt + `SUMMARY_JSON_SCHEMA` (passed as Ollama's `format`) give schema-valid
+JSON, and `summary_from_json` maps it identically to Gemini — a true drop-in.
+
+**Still open — measure the quality gap before defaulting to it.** The honest bar
+is "notes you'd actually trust." `scripts/compare_summarizers.py` runs local vs
+Gemini over the *same* transcript (a stored meeting id or a text file) and prints
+both notes + latency side by side:
+
+```bash
+ollama pull qwen2.5:7b
+python scripts/compare_summarizers.py --meeting 3        # or --file sample.txt
+```
+
+Gemini stays the default until that comparison says local is trustworthy.
 
 ## 5. Self-hosted notes backend (multi-device / team sharing)
 

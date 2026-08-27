@@ -1,0 +1,9 @@
+Priya: Okay, thanks everyone for joining. The main thing today is the Q3 launch date for the mobile app.
+Duc: Right. Engineering-wise we're basically feature complete, but the offline-sync bug is still open.
+Priya: How bad is it? Is that a blocker for launch?
+Duc: It only hits users who go offline mid-edit, so maybe two percent of sessions, but when it hits, they lose data. I'd call it a blocker.
+Maya: From marketing's side we've already got press lined up for September 15th, so slipping past that is expensive.
+Priya: Let's do this — Duc, you own getting the offline-sync fix in by the 8th, and we hold the 15th date. If it's not fixed by the 8th we reconvene and decide whether to slip.
+Duc: Works for me. I'll also need Maya to update the store screenshots before we submit to review.
+Maya: I can get the screenshots done by end of week.
+Priya: Great. And I'll draft the go/no-go checklist and send it around tomorrow. Decision stands: we're targeting September 15th.

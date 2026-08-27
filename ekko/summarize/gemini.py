@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import os
 
-from ..models import ActionItem, Summary, Transcript
-from .base import SUMMARY_INSTRUCTIONS, Summarizer
+from ..models import Summary, Transcript
+from .base import SUMMARY_INSTRUCTIONS, Summarizer, summary_from_json
 
 
 class GeminiSummarizer(Summarizer):
@@ -36,13 +36,4 @@ class GeminiSummarizer(Summarizer):
             contents=prompt,
             config={"response_mime_type": "application/json"},
         )
-        data = json.loads(resp.text)
-        return Summary(
-            tldr=data.get("tldr", ""),
-            key_points=data.get("key_points", []),
-            decisions=data.get("decisions", []),
-            action_items=[
-                ActionItem(text=a["text"], owner=a.get("owner"))
-                for a in data.get("action_items", [])
-            ],
-        )
+        return summary_from_json(json.loads(resp.text))

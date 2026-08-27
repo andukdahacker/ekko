@@ -98,8 +98,11 @@ compute_type = "int8"
 enabled = false
 
 [summarize]
+provider = "gemini"                       # "gemini" (cloud) or "local" (Ollama, fully offline)
 model = "gemini-3.6-flash"
 api_key = "PASTE_YOUR_GEMINI_KEY_HERE"    # billing-enabled key; or set GEMINI_API_KEY
+# Fully offline instead? Set provider = "local", install Ollama (https://ollama.com),
+# run \`ollama pull qwen2.5:7b\`, and set model = "qwen2.5:7b".
 
 [markdown]
 enabled = true
@@ -143,9 +146,19 @@ else
 fi
 
 # --- done -------------------------------------------------------------------
+# Fully-offline summaries are optional (default is Gemini). Tailor the hint to
+# whether Ollama is already installed.
+if command -v ollama >/dev/null 2>&1; then
+  OFFLINE_HINT="Ollama detected — for offline summaries: ${B}ollama pull qwen2.5:7b${N}, then set summarize.provider = local"
+else
+  OFFLINE_HINT="Prefer fully offline? Install Ollama (https://ollama.com), set summarize.provider = local"
+fi
+
 info "${B}Done.${N}"
 echo
 echo "  1. Add your Gemini key:   ${B}\$EDITOR $CONFIG${N}   (set summarize.api_key)"
 echo "  2. Online meetings:       ${B}${ONLINE_STEP}${N}"
 echo "  3. Run it:                ${B}ekko${N}   (opens the TUI)"
+echo
+echo "  ${D}Optional — ${OFFLINE_HINT}${N}"
 echo

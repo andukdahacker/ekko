@@ -357,6 +357,10 @@ class EkkoApp(App):
                         severity="error", timeout=10)
             return
 
+        # Local (Ollama) summarizer: warn now if the daemon/model isn't ready, so
+        # it doesn't only fail at summarize time — after the whole recording.
+        self._warn_if_summarizer_unready()
+
         mkind = MeetingKind(kind)
         try:
             self.source = build_source(self.cfg, mkind)   # macOS online -> tap source
@@ -380,6 +384,15 @@ class EkkoApp(App):
         self._render_audio()
         self.notify(f"● Recording ({kind}). Press s to stop.")
         self._live_preview()              # live transcript (best-effort; no-ops if unsupported)
+
+    def _warn_if_summarizer_unready(self) -> None:
+        """Non-blocking preflight for the local summarizer (no-op for others)."""
+        from .summarize.local import LocalSummarizer
+        summarizer = getattr(self.pipeline, "summarizer", None)
+        if isinstance(summarizer, LocalSummarizer):
+            problem = summarizer.preflight()
+            if problem:
+                self.notify(problem, severity="warning", timeout=10)
 
     # --- live transcript preview --------------------------------------------
     @work(thread=True, group="preview", exclusive=True)
