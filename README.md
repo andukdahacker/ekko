@@ -7,6 +7,8 @@ stay **on your device**; only the derived summary text is sent to a cloud model
 No meeting bots: it captures audio locally, so it works for Google Meet,
 Microsoft Teams, and in-person meetings alike.
 
+🌐 **[ekko website](https://andukdahacker.github.io/ekko/)** · [Install](#install-one-command) · [Docs](docs/)
+
 ## Architecture (every stage is a swappable interface)
 
 ```
