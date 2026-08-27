@@ -186,12 +186,29 @@
   .flow-legend{margin-top:16px; font-family:var(--mono); font-size:12.5px; color:var(--ink-3)}
   .flow-legend b{color:var(--accent-ink)}
 
-  /* tui showcase */
-  .tui .term-body{font-size:12.5px; line-height:1.5; white-space:pre}
-  .tui b{color:var(--term-accent); font-weight:600}
-  .tui .rec{color:#e0664f; font-weight:700}
-  .tui .sel{color:var(--term-ink)}
-  .tui .keys{color:var(--term-dim)}
+  /* tui showcase — a faithful Textual layout, mid-recording */
+  .tui .term-body{padding:16px; font-size:12.5px; line-height:1.55}
+  .tui-grid{display:grid; grid-template-columns:minmax(0,290px) 1fr; gap:12px}
+  @media (max-width:640px){ .tui-grid{grid-template-columns:1fr} }
+  .tui-col{display:flex; flex-direction:column; gap:12px; min-width:0}
+  .panel{position:relative; border:1px solid var(--term-line); border-radius:8px; padding:14px 12px 12px}
+  .panel > .t{position:absolute; top:-8px; left:11px; padding:0 6px; background:var(--term-bg); font-size:11px; letter-spacing:.03em; color:var(--term-accent); font-weight:600}
+  .panel.foc{border-color:color-mix(in oklab,var(--term-accent) 60%, var(--term-line))}
+  .mrow{display:grid; grid-template-columns:auto auto 1fr; gap:12px; color:var(--term-dim); white-space:nowrap; overflow:hidden; padding:1px 4px; margin:0 -4px; border-radius:4px}
+  .mrow .ti{color:var(--term-ink); overflow:hidden; text-overflow:ellipsis}
+  .mrow.sel{background:color-mix(in oklab,var(--term-accent) 15%, transparent)}
+  .mrow.sel span{color:var(--term-accent)!important}
+  .audio .chk{color:var(--term-green)}
+  .rec{color:#ff6b57; font-weight:700}
+  .rec .dot, .live .dot{display:inline-block; animation:recblink 1.2s steps(2,start) infinite}
+  @keyframes recblink{50%{opacity:.22}}
+  .det .live{color:#ff6b57; font-weight:700; display:flex; align-items:center; gap:8px; margin-bottom:9px}
+  .det p{margin:0; color:var(--term-ink); min-height:6.5em}
+  .det .who{color:var(--term-accent); font-weight:600}
+  .tcursor{display:inline-block; width:7px; height:1.05em; vertical-align:-3px; background:var(--term-accent); margin-left:1px; animation:blink 1.05s steps(2,start) infinite}
+  .tui-foot{margin-top:14px; padding-top:11px; border-top:1px solid var(--term-line); color:var(--term-dim); font-size:11.5px; overflow-x:auto; white-space:nowrap}
+  .tui-foot b{color:var(--term-accent); font-weight:600}
+  @media (prefers-reduced-motion:reduce){ .rec .dot,.live .dot,.tcursor{animation:none} }
 
   /* platforms */
   .plats{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
@@ -328,21 +345,36 @@
     <div class="wrap">
       <div class="sec-head">
         <span class="eyebrow">The interface</span>
-        <h2>It's just <span style="color:var(--accent-ink)">ekko</span> in a terminal.</h2>
-        <p>Type <span class="inline-code">ekko</span> and the whole thing opens — record on a keypress, read the note beside the list, all keyboard-driven.</p>
+        <h2>Watch the transcript while you record.</h2>
+        <p>Type <span class="inline-code">ekko</span> and the whole thing opens. Hit record and the transcript streams into the panel live — transcribed on your machine, as you talk.</p>
       </div>
       <div class="term tui">
         <div class="term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>ekko — meeting notes</span></div>
-<div class="term-body">┌ <b>Meetings</b> ─────────────┐┌ <b>Details</b> ──────────────────────────┐
-│<span class="sel">&gt; 12  2026-08-26  1:1     </span>││ <b># 1:1 with Priya</b>                  │
-│  11  2026-08-25  Standup ││                                      │
-│  10  2026-08-24  Sync    ││ <b>## TL;DR</b>                          │
-│                          ││ Agreed to ship the beta Friday.      │
-├ <b>Audio</b> ────────────────┤│                                      │
-│ ✓ tap  ✓ mic             ││ <b>## Action items</b>                   │
-│ <span class="rec">● REC 02:14</span>              ││ - [ ] release notes — <b>Priya</b>       │
-└──────────────────────────┘└──────────────────────────────────────┘
- <span class="keys"><b>r</b> rec · <b>o</b> online · <b>s</b> stop · <b>p</b> play · <b>/</b> search · <b>?</b> help · <b>q</b> quit</span></div>
+        <div class="term-body">
+          <div class="tui-grid">
+            <div class="tui-col">
+              <div class="panel foc">
+                <span class="t">Meetings</span>
+                <div class="mrow sel"><span>12</span><span>10:04</span><span class="ti">1:1 with Priya</span></div>
+                <div class="mrow"><span>11</span><span>Aug 25</span><span class="ti">Standup</span></div>
+                <div class="mrow"><span>10</span><span>Aug 24</span><span class="ti">Design sync</span></div>
+              </div>
+              <div class="panel audio">
+                <span class="t">Audio</span>
+                <div class="mrow" style="grid-template-columns:none; color:var(--term-ink)"><span><span class="chk">✓</span>&nbsp;tap&nbsp;&nbsp;&nbsp;<span class="chk">✓</span>&nbsp;mic</span></div>
+                <div class="rec" style="margin-top:8px"><span class="dot">●</span>&nbsp;REC online&nbsp;&nbsp;<span id="rectimer">01:12</span></div>
+              </div>
+            </div>
+            <div class="tui-col">
+              <div class="panel det">
+                <span class="t">Details</span>
+                <div class="live"><span class="dot">●</span>&nbsp;Live transcript</div>
+                <p id="livetext" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+          <div class="tui-foot"><b>r</b>&nbsp;rec&nbsp; <b>o</b>&nbsp;online&nbsp; <b>s</b>&nbsp;stop&nbsp; <b>p</b>&nbsp;play&nbsp; <b>R</b>&nbsp;reprocess&nbsp; <b>/</b>&nbsp;search&nbsp; <b>x</b>&nbsp;delete&nbsp; <b>?</b>&nbsp;help&nbsp; <b>q</b>&nbsp;quit</div>
+        </div>
       </div>
     </div>
   </section>
@@ -431,6 +463,49 @@
 </footer>
 
 <script>
+  // live transcript demo — type meeting speech into the Details panel + tick timer
+  (function(){
+    var el=document.getElementById('livetext'), tm=document.getElementById('rectimer');
+    if(!el) return;
+    var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    // [speaker, line]
+    var script=[
+      ['Priya','Friday works for the beta if we cut the export panel.'],
+      ['Duc','Agreed — push export to the next milestone, land the login fix first.'],
+      ['Priya',"I'll take the release notes and ping design for the empty states."],
+      ['Duc','Perfect. I’ll cut the build Thursday night so we can smoke-test.']
+    ];
+    function render(lines, partial){
+      var html=lines.map(function(l){ return '<span class="who">'+l[0]+':</span> '+l[1]; }).join('<br>');
+      if(partial!=null){
+        html += (lines.length?'<br>':'') + '<span class="who">'+partial[0]+':</span> '+partial[1]+'<span class="tcursor"></span>';
+      }
+      el.innerHTML=html;
+    }
+    if(reduce){ render(script, null); if(tm) tm.textContent='01:12'; return; }
+    // timer
+    var secs=72;
+    setInterval(function(){ secs++; if(tm) tm.textContent=('0'+Math.floor(secs/60)).slice(-2)+':'+('0'+(secs%60)).slice(-2); },1000);
+    // typewriter
+    var done=[], li=0, ci=0;
+    function tick(){
+      var line=script[li];
+      ci++;
+      render(done, [line[0], line[1].slice(0,ci)]);
+      if(ci>=line[1].length){
+        done.push(line); li++; ci=0;
+        if(li>=script.length){ // hold, then restart the stream
+          setTimeout(function(){ done=[]; li=0; ci=0; render([], [script[0][0],'']); setTimeout(tick,500); },2600);
+          return;
+        }
+        setTimeout(tick, 560);
+        return;
+      }
+      setTimeout(tick, 26+Math.random()*34);
+    }
+    render([], [script[0][0],'']); setTimeout(tick, 700);
+  })();
+
   // copy install command
   (function(){
     var btn=document.getElementById('copybtn');
