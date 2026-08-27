@@ -39,6 +39,7 @@ class LaptopSource(AudioSource):
         self._stop = threading.Event()
         self._path: Path | None = None
         self._ring = _RingBuffer(SAMPLE_RATE)   # recent audio for live preview
+        self.device_note: str | None = None     # set if we fell back to the default device
 
     def start(self, kind: MeetingKind) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -48,12 +49,17 @@ class LaptopSource(AudioSource):
         self._path = self.out_dir / f"meeting-{datetime.now():%Y%m%d-%H%M%S}.wav"
         self._stop.clear()
 
+        # Resolve the configured device, falling back to the default mic if it's
+        # gone (e.g. a stale `input_device` in config pointing at a device that
+        # no longer exists) so we warn-and-record instead of crashing.
+        device = self._resolve_device()
+
         # Capture ALL of the device's input channels, then downmix to mono. This
         # is what makes an online Aggregate Device work: it presents system audio
         # and the mic as SEPARATE channels (e.g. ch1-2 = BlackHole, ch3 = mic),
         # so a naive mono capture would grab only the first channel and silently
         # drop everyone (or you). Averaging the channels keeps both in one track.
-        in_channels = self._device_input_channels()
+        in_channels = self._device_input_channels(device)
 
         self._ring.clear()
 
@@ -68,7 +74,7 @@ class LaptopSource(AudioSource):
         self._stream = sd.InputStream(
             samplerate=SAMPLE_RATE,
             channels=in_channels,
-            device=self.input_device,
+            device=device,
             dtype="float32",
             callback=on_audio,
         )
@@ -82,17 +88,36 @@ class LaptopSource(AudioSource):
     def read_new_audio(self, marker: int):
         return self._ring.read_from(marker)
 
-    def _device_input_channels(self) -> int:
+    def _resolve_device(self):
+        """The device to open: the configured one if it exists, else the system
+        default input (None). Records `device_note` when it falls back so the UI
+        can say so rather than silently switching mics."""
+        self.device_note = None
+        dev = self.input_device
+        if dev is None:
+            return None
+        try:
+            sd.query_devices(dev)          # raises ValueError if no match
+            return dev
+        except Exception:
+            self.device_note = (f"Input device “{dev}” not found — recording with "
+                                f"the default microphone instead.")
+            return None
+
+    def _device_input_channels(self, device=None) -> int:
         """How many input channels the chosen device exposes (>=1).
 
         None means the system default input; sounddevice resolves a name or
         index the same way it does for the stream itself.
         """
-        dev = self.input_device
+        dev = device if device is not None else self.input_device
         if dev is None:
             dev = sd.default.device[0]
-        info = sd.query_devices(dev)
-        return max(1, int(info["max_input_channels"]))
+        try:
+            info = sd.query_devices(dev)
+            return max(1, int(info["max_input_channels"]))
+        except Exception:
+            return 1
 
     def _drain_to_file(self) -> None:
         with sf.SoundFile(self._path, mode="w", samplerate=SAMPLE_RATE,

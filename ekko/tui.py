@@ -432,7 +432,20 @@ class EkkoApp(App):
             if r.routed_to:
                 self.notify(f"Routed output → {r.routed_to} (still audible).")
 
-        self.source.start(mkind)
+        try:
+            self.source.start(mkind)
+        except Exception as e:
+            # e.g. the configured input device is gone / in use. Undo any output
+            # routing and surface the error instead of crashing the whole TUI.
+            A.restore_output(self.rec_prev_output)
+            A.finish_capture(mkind)
+            self.notify(f"Couldn't start capture: {e}", severity="error", timeout=10)
+            return
+
+        note = getattr(self.source, "device_note", None)
+        if note:                          # fell back to the default mic — say so
+            self.notify(note, severity="warning", timeout=8)
+
         self.recording = True
         self.rec_kind = mkind
         self.rec_started_at = datetime.now()
