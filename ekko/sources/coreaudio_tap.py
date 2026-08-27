@@ -157,6 +157,9 @@ class TapSource(AudioSource):
     def latest_audio(self, seconds: float):
         return self._ring.latest(seconds)
 
+    def read_new_audio(self, marker: int):
+        return self._ring.read_from(marker)
+
     def start(self, kind: MeetingKind) -> None:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         from datetime import datetime

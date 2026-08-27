@@ -79,6 +79,9 @@ class LaptopSource(AudioSource):
     def latest_audio(self, seconds: float):
         return self._ring.latest(seconds)
 
+    def read_new_audio(self, marker: int):
+        return self._ring.read_from(marker)
+
     def _device_input_channels(self) -> int:
         """How many input channels the chosen device exposes (>=1).
 

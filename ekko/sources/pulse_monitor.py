@@ -86,6 +86,26 @@ class MonitorSource(AudioSource):
         data = np.frombuffer(raw[: len(raw) // 2 * 2], dtype=np.int16)
         return (data.astype(np.float32) / 32768.0), RATE
 
+    def read_new_audio(self, marker: int):
+        # `marker` is a sample offset into the system-monitor raw file.
+        if not self._sys_raw or not self._sys_raw.exists():
+            return None
+        try:
+            with open(self._sys_raw, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                start = marker * 2                    # s16le mono → 2 bytes/sample
+                if start >= size:
+                    return None
+                f.seek(start)
+                raw = f.read((size - start) // 2 * 2)
+        except OSError:
+            return None
+        if len(raw) < 2:
+            return None
+        data = np.frombuffer(raw, dtype=np.int16)
+        return (data.astype(np.float32) / 32768.0), RATE, marker + len(data)
+
     def _parec(self, source: str, raw_path: Path):
         f = open(raw_path, "wb")
         p = subprocess.Popen(

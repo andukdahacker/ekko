@@ -33,3 +33,11 @@ class AudioSource(ABC):
         `seconds` of audio while recording, for a live transcript preview — or
         None if this source doesn't support it. Best-effort; never raises."""
         return None
+
+    def read_new_audio(self, marker: int):
+        """Optional: return `(mono_float32, sample_rate, new_marker)` for the
+        audio captured since `marker` — an opaque integer cursor; pass 0 the
+        first time, then feed back the returned cursor. Lets the live preview
+        accumulate a full transcript instead of re-reading a rolling window.
+        None if unsupported or nothing new. Best-effort; never raises."""
+        return None

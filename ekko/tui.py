@@ -24,7 +24,7 @@ from pathlib import Path
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Header, Input, Label, Markdown, Static
 
@@ -87,11 +87,13 @@ class HelpScreen(ModalScreen):
         yield Static(
             "[b]ekko — keys[/b]\n\n"
             "  [b]r[/b] record in-person    [b]o[/b] record online    [b]s[/b] stop\n"
-            "  [b]p[/b] play audio          [b]v[/b] reveal on disk    [b]R[/b] re-process\n"
+            "  [b]p[/b] play / stop audio   [b]v[/b] reveal on disk    [b]R[/b] re-process\n"
             "  [b]f[/b] process a file      [b]y[/b] copy note         [b]x[/b] delete\n"
             "  [b]/[/b] search              [b]j/k[/b] move            [b]tab[/b] focus\n"
             "  [b]?[/b] help                [b]q[/b] quit\n\n"
-            "[dim]esc / q to close[/]", id="help")
+            "[dim]tab into Details, then j/k · arrows · PgUp/PgDn to scroll.\n"
+            "y copies the whole note to your clipboard.\n"
+            "esc / q to close[/]", id="help")
 
     def on_key(self, event) -> None:                 # any key closes
         self.dismiss()
@@ -107,6 +109,8 @@ class EkkoApp(App):
     #meetings { height: 1fr; border: round $primary; }
     #audio { height: auto; min-height: 6; border: round $primary; padding: 0 1; }
     #details { width: 1fr; border: round $primary; padding: 0 1; }
+    #details:focus { border: round $accent; }
+    #note { height: auto; }
     #dialog {
         width: 60; height: auto; padding: 1 2;
         border: thick $accent; background: $surface;
@@ -121,13 +125,13 @@ class EkkoApp(App):
         Binding("r", "record('in_person')", "Rec"),
         Binding("o", "record('online')", "Online"),
         Binding("s", "stop", "Stop"),
-        Binding("p", "play", "Play"),
+        Binding("p", "play", "Play/Stop"),
+        Binding("y", "copy", "Copy"),
         Binding("R", "reprocess", "Reprocess"),
         Binding("slash", "search", "Search"),
         Binding("x", "delete", "Delete"),
         Binding("f", "process_file", "File", show=False),
         Binding("v", "reveal", "Reveal", show=False),
-        Binding("y", "copy", "Copy", show=False),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("tab", "focus_next", "Focus", show=False),
@@ -155,6 +159,7 @@ class EkkoApp(App):
         self._audio_status: A.AudioStatus | None = None
         self._progress: str = ""
         self.last_error: str | None = None
+        self._player = None                          # running audio-playback process, if any
 
     # --- layout -------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -163,13 +168,14 @@ class EkkoApp(App):
             with Vertical(id="left"):
                 yield DataTable(id="meetings", cursor_type="row", zebra_stripes=True)
                 yield Static("", id="audio")
-            yield Markdown("", id="details")
+            with VerticalScroll(id="details"):
+                yield Markdown("", id="note")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#meetings", DataTable).border_title = "Meetings"
         self.query_one("#audio", Static).border_title = "Audio"
-        self.query_one("#details", Markdown).border_title = "Details"
+        self.query_one("#details", VerticalScroll).border_title = "Details  (tab to scroll)"
 
         try:
             self.cfg = load_config(self._config_path)
@@ -221,13 +227,14 @@ class EkkoApp(App):
             self.selected_id = None
             msg = (f"_No meetings match “{self.filter}”._" if self.filter else
                    "_No meetings yet. Press **r** (in-person) or **o** (online) to record._")
-            self.query_one("#details", Markdown).update(msg)
+            self.query_one("#note", Markdown).update(msg)
 
     def show_details(self, meeting_id: int) -> None:
         self.selected_id = meeting_id
         m = self.store.get(meeting_id) if self.store else None
         md = render_note(m) if m else "_Not found._"
-        self.query_one("#details", Markdown).update(md)
+        self.query_one("#note", Markdown).update(md)
+        self.query_one("#details", VerticalScroll).scroll_home(animate=False)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         if event.row_key and event.row_key.value:
@@ -270,10 +277,17 @@ class EkkoApp(App):
 
     # --- navigation ---------------------------------------------------------
     def action_cursor_down(self) -> None:
-        self.query_one("#meetings", DataTable).action_cursor_down()
+        # When the details pane is focused, j/k scroll it; otherwise move the list.
+        if isinstance(self.focused, VerticalScroll):
+            self.focused.scroll_down()
+        else:
+            self.query_one("#meetings", DataTable).action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        self.query_one("#meetings", DataTable).action_cursor_up()
+        if isinstance(self.focused, VerticalScroll):
+            self.focused.scroll_up()
+        else:
+            self.query_one("#meetings", DataTable).action_cursor_up()
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -295,6 +309,11 @@ class EkkoApp(App):
         return self.store.get(self.selected_id)
 
     def action_play(self) -> None:
+        # p toggles: if something's already playing, stop it.
+        if self._player is not None and self._player.poll() is None:
+            self._stop_playback()
+            self.notify("■ Stopped.")
+            return
         m = self._selected_meeting()
         if not m:
             return
@@ -302,10 +321,30 @@ class EkkoApp(App):
             self.notify("No audio file for this meeting.", severity="warning")
             return
         from .sysutil import play_audio
-        if play_audio(Path(m.audio_path)):
-            self.notify("▶ playing…")
+        proc = play_audio(Path(m.audio_path))
+        if proc is not None:
+            self._player = proc
+            self.notify("▶ Playing… (p to stop)")
         else:
             self.notify("No audio player found.", severity="warning")
+
+    def _stop_playback(self) -> None:
+        """Stop the current playback process, if any. Safe to call anytime."""
+        p, self._player = self._player, None
+        if p is None or p.poll() is not None:
+            return
+        try:
+            p.terminate()
+            try:
+                p.wait(timeout=1.0)
+            except Exception:
+                p.kill()
+        except Exception:
+            pass
+
+    def on_unmount(self) -> None:
+        # Don't leave afplay/ffplay running after the TUI exits.
+        self._stop_playback()
 
     def action_reveal(self) -> None:
         m = self._selected_meeting()
@@ -400,31 +439,44 @@ class EkkoApp(App):
         import tempfile
         import time as _time
 
+        import numpy as np
         import soundfile as sf
         tr = None
         tmp = Path(tempfile.gettempdir()) / "ekko-live.wav"
+        marker = 0                                   # audio cursor, fed back each read
+        pending = np.zeros(0, dtype=np.float32)      # new audio not yet transcribed
+        transcript = ""                              # accumulated, from the start
+        self.call_from_thread(self._show_live, "")
         while self.recording:
             _time.sleep(3.0)
             if not self.recording:
                 break
             try:
-                got = self.source.latest_audio(10.0)
+                got = self.source.read_new_audio(marker)
             except Exception:
                 got = None
-            if not got:
-                continue
-            data, rate = got
-            if data is None or data.size < rate * 0.6:   # need ~0.6s of audio
+            if got:
+                data, rate, marker = got
+                if data is not None and data.size:
+                    pending = np.concatenate([pending, data])
+            else:
+                rate = None
+            # Transcribe once we've gathered a chunky, non-overlapping window —
+            # bigger windows read far better than 3s slivers.
+            if rate is None or pending.size < rate * 6.0:
                 continue
             if tr is None:
                 from .transcribe.whisper import WhisperTranscriber
                 tr = WhisperTranscriber(model_size="tiny")
+            chunk, pending = pending, np.zeros(0, dtype=np.float32)
             try:
-                sf.write(tmp, data, rate, subtype="PCM_16")
+                sf.write(tmp, chunk, rate, subtype="PCM_16")
                 text = " ".join(s.text for s in tr.transcribe(str(tmp)).segments).strip()
             except Exception:
                 continue
-            self.call_from_thread(self._show_live, text)
+            if text:
+                transcript = f"{transcript} {text}".strip()
+                self.call_from_thread(self._show_live, transcript)
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
@@ -432,8 +484,10 @@ class EkkoApp(App):
 
     def _show_live(self, text: str) -> None:
         if self.recording:
-            self.query_one("#details", Markdown).update(
+            self.query_one("#note", Markdown).update(
                 f"## ● Live transcript\n\n{text or '_…listening…_'}")
+            # Follow the tail as new text streams in.
+            self.query_one("#details", VerticalScroll).scroll_end(animate=False)
 
     def action_stop(self) -> None:
         if not self.recording:

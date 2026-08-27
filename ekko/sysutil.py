@@ -11,16 +11,19 @@ import sys
 from pathlib import Path
 
 
-def _spawn(cmd: list[str]) -> bool:
+def _spawn(cmd: list[str]) -> subprocess.Popen | None:
     try:
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True
+        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
     except OSError:
-        return False
+        return None
 
 
-def play_audio(path: Path) -> bool:
-    """Play an audio file via the system player (detached)."""
+def play_audio(path: Path) -> subprocess.Popen | None:
+    """Play an audio file via the system player. Returns the player process so
+    the caller can stop it (and not leave it playing after quit), or None if no
+    player was found. `xdg-open` hands off to another app, so it can't be
+    stopped and is only a last resort."""
     if sys.platform == "darwin":
         return _spawn(["afplay", str(path)])
     for player, args in (("paplay", []), ("ffplay", ["-nodisp", "-autoexit",
@@ -30,7 +33,7 @@ def play_audio(path: Path) -> bool:
             return _spawn([player, *args, str(path)])
     if shutil.which("xdg-open"):
         return _spawn(["xdg-open", str(path)])
-    return False
+    return None
 
 
 def reveal_file(path: Path) -> bool:
