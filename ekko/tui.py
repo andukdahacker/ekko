@@ -91,8 +91,8 @@ class HelpScreen(ModalScreen):
             "  [b]f[/b] process a file      [b]y[/b] copy note         [b]x[/b] delete\n"
             "  [b]/[/b] search              [b]j/k[/b] move            [b]tab[/b] focus\n"
             "  [b]?[/b] help                [b]q[/b] quit\n\n"
-            "[dim]tab into Details, then j/k · arrows · PgUp/PgDn to scroll.\n"
-            "y copies the whole note to your clipboard.\n"
+            "[dim]scroll Details with the mouse, or focus it (tab) and use\n"
+            "arrows · j/k · PgUp/PgDn.  y copies the whole note.\n"
             "esc / q to close[/]", id="help")
 
     def on_key(self, event) -> None:                 # any key closes
@@ -175,7 +175,7 @@ class EkkoApp(App):
     def on_mount(self) -> None:
         self.query_one("#meetings", DataTable).border_title = "Meetings"
         self.query_one("#audio", Static).border_title = "Audio"
-        self.query_one("#details", VerticalScroll).border_title = "Details  (tab to scroll)"
+        self.query_one("#details", VerticalScroll).border_title = "Details"
 
         try:
             self.cfg = load_config(self._config_path)
