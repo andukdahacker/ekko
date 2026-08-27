@@ -20,7 +20,9 @@ audio source ─▶ whisper ─▶ diarize ─▶ identify ─▶ summarize ─�
 
 - **source** — `LaptopSource` today; a phone-upload source drops in later (same interface).
 - **transcribe** — `faster-whisper`, fully on-device.
-- **diarize** — optional pyannote overlay (Speaker A/B/C). Off by default.
+- **diarize** — splits a single mixed stream into Speaker A/B/C. On by default via a
+  fully-local MFCC clusterer (no token, no extra installs); `pyannote` is an opt-in
+  higher-accuracy backend. `method = "local" | "pyannote" | "off"`.
 - **identify** — names speakers. v1: manual map (in-person). Online screen-watching
   (`ScreenIdentifier`) is stubbed and plugs in without pipeline changes.
 - **summarize** — provider-agnostic. Gemini Flash default; Claude or a local 8B are drop-ins.

@@ -16,10 +16,16 @@ model_size = "small"
 compute_type = "int8"
 
 [diarize]
-# Off by default — v1 works without it (everyone -> "Speaker A").
-# Turn on after setting up a Hugging Face token for pyannote.
-enabled = false
-# hf_token = "hf_..."
+# Who-spoke-when. method = "local" (default) | "pyannote" | "off".
+#   local    — fully on-device, no token, no extra installs. Separates a single
+#              mixed stream (e.g. an online meeting) into Speaker A/B/C by voice;
+#              approximate, so rename the clusters by hand afterwards.
+#   pyannote — best accuracy; needs `pip install pyannote.audio` + an HF token
+#              (the model is gated), then set hf_token below.
+#   off      — everyone -> "Speaker A".
+method = "local"
+max_speakers = 8        # ceiling on how many distinct speakers local may find
+# hf_token = "hf_..."   # only for method = "pyannote"
 
 [summarize]
 # provider = "gemini" (cloud) or "local" (Ollama, fully offline). Default gemini.
