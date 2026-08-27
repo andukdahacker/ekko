@@ -45,8 +45,20 @@ def render_note(m: Meeting) -> str:
             L.append("")
 
     L.append("## Transcript")
+    # Group consecutive segments from the same speaker into one turn, and render
+    # each turn as its own paragraph (blank line between) so speaker changes
+    # actually break onto a new line — adjacent Markdown lines would otherwise
+    # collapse into a single run-on paragraph.
+    turns: list[tuple[str, list[str]]] = []
     for seg in m.transcript.segments:
-        L.append(f"**{seg.speaker}:** {seg.text}")
+        text = seg.text.strip()
+        if turns and turns[-1][0] == seg.speaker:
+            turns[-1][1].append(text)
+        else:
+            turns.append((seg.speaker, [text]))
+    for speaker, texts in turns:
+        L.append("")                                   # blank line = new paragraph
+        L.append(f"**{speaker}:** {' '.join(texts).strip()}")
     return "\n".join(L) + "\n"
 
 
