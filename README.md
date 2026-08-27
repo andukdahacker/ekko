@@ -1,5 +1,7 @@
 # ekko
 
+<a href="https://andukdahacker.github.io/ekko/"><img src="docs/og.png" alt="ekko — meeting notes that never leave your laptop. On-device transcription, no meeting bots, a terminal UI." width="100%"></a>
+
 **ekko** — a local-first, privacy-preserving meeting notetaker. Audio and transcription
 stay **on your device**; only the derived summary text is sent to a cloud model
 (Gemini Flash) for summarization — and only if you choose a cloud summarizer.
