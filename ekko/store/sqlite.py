@@ -87,6 +87,41 @@ class SqliteStore:
             audio_path=Path(audio_path) if audio_path else None,
             transcript=Transcript(segments=segments), summary=summary, id=mid)
 
+    def rename_speakers(self, meeting_id: int, mapping: dict[str, str]) -> None:
+        """Rename speakers in a stored meeting in place: rewrites the transcript's
+        speaker labels (and any action-item owner that matches a renamed speaker)
+        per `mapping` = {old_label: new_name}. Persists without re-processing."""
+        if not mapping:
+            return
+        row = self.db.execute(
+            "SELECT transcript_json, summary_json FROM meetings WHERE id = ?",
+            (meeting_id,)).fetchone()
+        if row is None:
+            return
+        transcript_json, summary_json = row
+
+        segs = json.loads(transcript_json or "[]")
+        for s in segs:
+            if s.get("speaker") in mapping:
+                s["speaker"] = mapping[s["speaker"]]
+        new_transcript = json.dumps(segs)
+
+        new_summary = summary_json
+        if summary_json:
+            d = json.loads(summary_json)
+            touched = False
+            for a in d.get("action_items", []):
+                if a.get("owner") in mapping:
+                    a["owner"] = mapping[a["owner"]]
+                    touched = True
+            if touched:
+                new_summary = json.dumps(d)
+
+        self.db.execute(
+            "UPDATE meetings SET transcript_json = ?, summary_json = ? WHERE id = ?",
+            (new_transcript, new_summary, meeting_id))
+        self.db.commit()
+
     def delete(self, meeting_id: int) -> None:
         self.db.execute("DELETE FROM meetings WHERE id = ?", (meeting_id,))
         self.db.commit()

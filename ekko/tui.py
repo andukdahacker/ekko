@@ -80,6 +80,44 @@ class PromptScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class RenameSpeakersScreen(ModalScreen["dict | None"]):
+    """Edit the display name for each speaker in a meeting. Returns a
+    {old_label: new_name} map for the ones that actually changed (or None)."""
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, speakers: list[str]):
+        super().__init__()
+        self._speakers = speakers
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label("[b]Rename speakers[/b]")
+            yield Label("[dim]Edit each name · Enter to save · esc to cancel[/]")
+            with VerticalScroll(id="rename_list"):
+                for i, sp in enumerate(self._speakers):
+                    yield Label(f"[dim]{sp} →[/]")
+                    yield Input(value=sp, id=f"sp_{i}")
+
+    def on_mount(self) -> None:
+        inputs = self.query(Input)
+        if inputs:
+            inputs.first().focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self._save()
+
+    def _save(self) -> None:
+        mapping: dict[str, str] = {}
+        for i, sp in enumerate(self._speakers):
+            val = self.query_one(f"#sp_{i}", Input).value.strip()
+            if val and val != sp:
+                mapping[sp] = val
+        self.dismiss(mapping or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 class HelpScreen(ModalScreen):
     """Keybinding cheatsheet (dismiss with any key)."""
     BINDINGS = [Binding("escape,q,question_mark", "dismiss", "Close")]
@@ -89,7 +127,8 @@ class HelpScreen(ModalScreen):
             "[b]ekko — keys[/b]\n\n"
             "  [b]r[/b] record in-person    [b]o[/b] record online    [b]s[/b] stop\n"
             "  [b]p[/b] play / stop audio   [b]v[/b] reveal on disk    [b]R[/b] re-process\n"
-            "  [b]f[/b] process a file      [b]y[/b] copy note         [b]x[/b] delete\n"
+            "  [b]n[/b] rename speakers     [b]y[/b] copy note         [b]x[/b] delete\n"
+            "  [b]f[/b] process a file\n"
             "  [b]/[/b] search              [b]j/k[/b] move            [b]tab[/b] focus\n"
             "  [b]?[/b] help                [b]q[/b] quit\n\n"
             "[dim]scroll Details with the mouse, or focus it (tab) and use\n"
@@ -119,7 +158,9 @@ class EkkoApp(App):
         border: thick $accent; background: $surface;
         align: center middle;
     }
-    ConfirmScreen, PromptScreen, HelpScreen { align: center middle; }
+    ConfirmScreen, PromptScreen, HelpScreen, RenameSpeakersScreen { align: center middle; }
+    #rename_list { height: auto; max-height: 18; margin-top: 1; }
+    #rename_list Input { margin-bottom: 1; }
     #help { width: 64; height: auto; padding: 1 2; border: thick $accent;
             background: $surface; }
     """
@@ -129,6 +170,7 @@ class EkkoApp(App):
         Binding("o", "record('online')", "Online"),
         Binding("s", "stop", "Stop"),
         Binding("p", "play", "Play/Stop"),
+        Binding("n", "rename", "Rename"),
         Binding("y", "copy", "Copy"),
         Binding("R", "reprocess", "Reprocess"),
         Binding("slash", "search", "Search"),
@@ -403,6 +445,28 @@ class EkkoApp(App):
             self.notify("Copied note to clipboard.")
         else:
             self.notify("No clipboard tool found.", severity="warning")
+
+    def action_rename(self) -> None:
+        m = self._selected_meeting()
+        if not m:
+            return
+        speakers: list[str] = []
+        for seg in m.transcript.segments:
+            if seg.speaker not in speakers:
+                speakers.append(seg.speaker)
+        if not speakers:
+            self.notify("No speakers to rename.", severity="warning")
+            return
+        self.push_screen(RenameSpeakersScreen(speakers),
+                         lambda mp: self._apply_rename(m.id, mp))
+
+    def _apply_rename(self, meeting_id: int | None, mapping) -> None:
+        if not mapping or meeting_id is None or not self.store:
+            return
+        self.store.rename_speakers(meeting_id, mapping)
+        n = len(mapping)
+        self.notify(f"Renamed {n} speaker{'s' if n != 1 else ''}.")
+        self.show_details(meeting_id)
 
     def action_reprocess(self) -> None:
         if self.busy or self.recording:
