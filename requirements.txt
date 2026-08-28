@@ -4,6 +4,7 @@ soundfile>=0.12.1       # write WAV
 faster-whisper>=1.0.0   # local, on-device transcription
 google-genai>=0.3.0     # Gemini Flash summarizer
 textual>=0.80           # terminal UI (`ekko tui`)
+onnxruntime>=1.17       # local neural speaker diarization (CAM++ embeddings)
 
 # --- optional / later ---
-# pyannote.audio>=3.1   # diarization (needs a Hugging Face token); enable in config
+# pyannote.audio>=3.1   # highest-accuracy diarization (needs a Hugging Face token); enable in config

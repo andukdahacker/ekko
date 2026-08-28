@@ -141,9 +141,29 @@ def _cluster(emb: np.ndarray, max_speakers: int = 8, threshold: float = 0.30):
     return labels
 
 
+def _merge_singletons(emb: np.ndarray, labels: list[int]) -> list[int]:
+    """Fold one-segment clusters into their nearest larger cluster — they're
+    almost always a stray outlier (a laugh, music sting, a noisy segment), not a
+    real extra speaker. Skipped when everything is a singleton."""
+    from collections import Counter
+    counts = Counter(labels)
+    smalls = {c for c, n in counts.items() if n == 1}
+    if not smalls or len(smalls) == len(counts):
+        return labels
+    x = _l2(emb)
+    centroids = {c: _l2(np.stack([x[i] for i, l in enumerate(labels) if l == c])
+                        .mean(0)[None])[0]
+                 for c in counts if c not in smalls}
+    out = list(labels)
+    for i, l in enumerate(labels):
+        if l in smalls:
+            out[i] = max(centroids, key=lambda c: float(x[i] @ centroids[c]))
+    return out
+
+
 # --- entry point ------------------------------------------------------------
 def diarize_local(audio_path: Path, transcript: Transcript,
-                  max_speakers: int = 8, threshold: float = 0.30) -> Transcript:
+                  max_speakers: int = 8, threshold: float | None = None) -> Transcript:
     segs = transcript.segments
     if not segs:
         return transcript
@@ -153,31 +173,52 @@ def diarize_local(audio_path: Path, transcript: Transcript,
             s.speaker = "Speaker A"
         return transcript
 
+    # Prefer neural speaker embeddings (real separation); fall back to the
+    # MFCC fingerprints if onnxruntime / the model / inference isn't available.
+    embs, backend_threshold = None, 0.30
     try:
-        import soundfile as sf
-        y, sr = sf.read(str(audio_path), dtype="float32", always_2d=False)
+        from .neural_embed import THRESHOLD, embed_segments
+        embs = embed_segments(audio_path, segs)
+        backend_threshold = THRESHOLD
+        if sum(e is not None for e in embs) < 2:     # nothing usable → try MFCC
+            embs = None
     except Exception:
-        return all_a()
-    if getattr(y, "ndim", 1) > 1:
-        y = y.mean(axis=1)
+        embs = None
 
-    embs = []
-    for s in segs:
-        a = int(max(0.0, s.start) * sr)
-        b = int(max(s.start, s.end) * sr)
-        embs.append(_embed(y[a:b], sr) if b > a else None)
+    if embs is None:                                 # MFCC fallback
+        try:
+            import soundfile as sf
+            y, sr = sf.read(str(audio_path), dtype="float32", always_2d=False)
+        except Exception:
+            return all_a()
+        if getattr(y, "ndim", 1) > 1:
+            y = y.mean(axis=1)
+        embs = []
+        for s in segs:
+            a = int(max(0.0, s.start) * sr)
+            b = int(max(s.start, s.end) * sr)
+            embs.append(_embed(y[a:b], sr) if b > a else None)
+        backend_threshold = 0.30
 
     valid = [i for i, e in enumerate(embs) if e is not None]
     if len(valid) < 2:
         return all_a()
 
-    labels = _cluster(np.stack([embs[i] for i in valid]), max_speakers, threshold)
+    thr = backend_threshold if threshold is None else threshold
+    E = np.stack([embs[i] for i in valid])
+    labels = _merge_singletons(E, _cluster(E, max_speakers, thr))
     by_seg = {vi: lab for vi, lab in zip(valid, labels)}
 
+    # Renumber clusters to Speaker A/B/C in first-appearance order.
+    order: dict[int, int] = {}
+    for i in range(len(segs)):
+        if i in by_seg and by_seg[i] not in order:
+            order[by_seg[i]] = len(order)
+
     # Fill segments too short to fingerprint with the previous known speaker.
-    last = labels[0]
+    last = by_seg[valid[0]]
     for i, s in enumerate(segs):
         if i in by_seg:
             last = by_seg[i]
-        s.speaker = f"Speaker {_letter(last)}"
+        s.speaker = f"Speaker {_letter(order.get(last, 0))}"
     return transcript

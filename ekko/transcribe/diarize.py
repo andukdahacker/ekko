@@ -3,9 +3,12 @@
 Kept separate from transcription so it's a swappable/optional stage. Three
 backends, selected by `method` (see [diarize] in config):
 
-  * "local"    — fully on-device, no token, no extra installs (default). Clusters
-                 segments by voice timbre; approximate but works out of the box,
-                 even on a single mixed online-meeting stream. See local_diarize.
+  * "local"    — fully on-device, no token (default). Uses a neural speaker-
+                 embedding model (CAM++ via onnxruntime, ~28 MB, downloaded once)
+                 that actually separates voices on real recordings; falls back to
+                 hand-crafted MFCC features if onnxruntime/the model is missing.
+                 Works even on a single mixed online-meeting stream. See
+                 local_diarize / neural_embed.
   * "pyannote" — best accuracy, but needs `pip install pyannote.audio` and a
                  Hugging Face token (the model is gated).
   * "off"      — every segment -> "Speaker A" (rename by hand later).
@@ -23,7 +26,7 @@ from ..models import Transcript
 
 class Diarizer:
     def __init__(self, method: str = "local", hf_token: str | None = None,
-                 max_speakers: int = 8, threshold: float = 0.30):
+                 max_speakers: int = 8, threshold: float | None = None):
         self.method = method
         self.hf_token = hf_token
         self.max_speakers = max_speakers

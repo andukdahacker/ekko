@@ -17,14 +17,17 @@ compute_type = "int8"
 
 [diarize]
 # Who-spoke-when. method = "local" (default) | "pyannote" | "off".
-#   local    — fully on-device, no token, no extra installs. Separates a single
-#              mixed stream (e.g. an online meeting) into Speaker A/B/C by voice;
-#              approximate, so rename the clusters by hand afterwards.
-#   pyannote — best accuracy; needs `pip install pyannote.audio` + an HF token
+#   local    — fully on-device, no token. Uses a neural speaker-embedding model
+#              (CAM++, ~28 MB, downloaded once to ~/.ekko/models) that separates a
+#              single mixed stream (e.g. an online meeting) into Speaker A/B/C;
+#              rename the clusters by hand afterwards. Falls back to lightweight
+#              MFCC features if onnxruntime/the model isn't available.
+#   pyannote — highest accuracy; needs `pip install pyannote.audio` + an HF token
 #              (the model is gated), then set hf_token below.
 #   off      — everyone -> "Speaker A".
 method = "local"
 max_speakers = 8        # ceiling on how many distinct speakers local may find
+# threshold = 0.65      # advanced: lower = splits speakers more eagerly (auto if unset)
 # hf_token = "hf_..."   # only for method = "pyannote"
 
 [summarize]

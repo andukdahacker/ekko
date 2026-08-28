@@ -66,7 +66,7 @@ def build_pipeline(cfg: dict) -> Pipeline:
     diarizer = Diarizer(method=method,
                         hf_token=diar_cfg.get("hf_token") or os.environ.get("HF_TOKEN"),
                         max_speakers=diar_cfg.get("max_speakers", 8),
-                        threshold=diar_cfg.get("threshold", 0.30))
+                        threshold=diar_cfg.get("threshold"))   # None = auto per backend
 
     # v1: manual naming (in-person). Screen-based naming plugs in here later.
     identifier = ManualIdentifier(name_map=cfg.get("speakers", {}).get("name_map", {}))
